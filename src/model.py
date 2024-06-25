@@ -86,3 +86,4 @@ def model_results(X_train, X_test, y_train, y_test):
 
     plt.tight_layout()
     plt.show()
+    return best_model
