@@ -321,7 +321,7 @@ def pre_processing():
 
         # Generate synthetic data
 
-        df_merged = df_merged[df_merged["time_taken_to_pack"] > 0]
+        df_merged = df_merged[df_merged["TIME_TAKEN_TO_PACK"] > 0]
 
         # Drop unnecessary columns
     df_merged = df_merged.drop(
