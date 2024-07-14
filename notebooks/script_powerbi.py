@@ -154,8 +154,10 @@ def create_label_encodings(df_merged):
     df_merged["PACKAGE_TYPE"] = df_merged["PACKAGE_TYPE"].replace(" ", mode_value)
 
     # Label encoding for PACKAGE_TYPE
-    label_encoder = LabelEncoder()
-    df_merged["PACKAGE_TYPE"] = label_encoder.fit_transform(df_merged["PACKAGE_TYPE"])
+    label_encoder_package_type = LabelEncoder()
+    df_merged["PACKAGE_TYPE"] = label_encoder_package_type.fit_transform(
+        df_merged["PACKAGE_TYPE"]
+    )
 
     # Handle missing values and convert PRIORITY to integer
     df_merged["PRIORITY"] = df_merged["PRIORITY"].fillna(1)
@@ -191,10 +193,10 @@ def create_label_encodings(df_merged):
     df_merged["COUNTRY"] = df_merged["COUNTRY"].replace(["Dänemark"], "DK")
     df_merged["COUNTRY"] = df_merged["COUNTRY"].replace(["Tr"], "TR")
 
-    label_encoder = LabelEncoder()
-    df_merged["COUNTRY"] = label_encoder.fit_transform(df_merged["COUNTRY"])
+    label_encoder_country = LabelEncoder()
+    df_merged["COUNTRY"] = label_encoder_country.fit_transform(df_merged["COUNTRY"])
 
-    return df_merged
+    return df_merged, label_encoder_package_type, label_encoder_country
 
 
 def create_density(df_merged):
@@ -307,7 +309,9 @@ def pre_processing():
     df_merged = create_density(df_merged)
 
     # create label encodings for categorical data
-    df_merged = create_label_encodings(df_merged)
+    df_merged, label_encoder_package_type, label_encoder_country = (
+        create_label_encodings(df_merged)
+    )
 
     if (
         "DELIVERY_NOTE_DATE_TIME" in df_merged.columns
@@ -355,10 +359,10 @@ def pre_processing():
 
     # Print or further process df_merged as required
     # print(df_merged)
-    return df_merged, temp_df
+    return df_merged, temp_df, label_encoder_package_type, label_encoder_country
 
 
-df_merged, temp_df = pre_processing()
+df_merged, temp_df, label_encoder_package_type, label_encoder_country = pre_processing()
 df_merged = df_merged.dropna()
 
 # mean_Data = pd.read_excel("mean_processing_time.xlsx")
@@ -459,4 +463,10 @@ for column in final_results.select_dtypes(include=["float64", "int64"]).columns:
     final_results[column] = final_results[column].apply(
         lambda x: str(x).replace(".", ",")
     )
+final_results["COUNTRY"] = label_encoder_country.inverse_transform(
+    final_results["COUNTRY"]
+)
+final_results["PACKAGE_TYPE"] = label_encoder_package_type.inverse_transform(
+    final_results["PACKAGE_TYPE"]
+)
 final_results.to_excel("pred.xlsx")

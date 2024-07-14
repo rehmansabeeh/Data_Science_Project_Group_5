@@ -40,7 +40,9 @@ def create_datetime(row):
 # Apply the function to each row
 
 
-def model_results(df_merged, mean_Data):
+def model_results(
+    df_merged, mean_Data, label_encoder_package_type, label_encoder_country
+):
     # Split the data into train and test sets
     if "TOTAL_TIME_TAKEN" in df_merged.columns:
         X = df_merged.drop(columns=["TOTAL_TIME_TAKEN"])
@@ -203,5 +205,11 @@ def model_results(df_merged, mean_Data):
         final_results[column] = final_results[column].apply(
             lambda x: str(x).replace(".", ",")
         )
+    final_results["COUNTRY"] = label_encoder_country.inverse_transform(
+        final_results["COUNTRY"]
+    )
+    final_results["PACKAGE_TYPE"] = label_encoder_package_type.inverse_transform(
+        final_results["PACKAGE_TYPE"]
+    )
     final_results.to_excel("../data/pred.xlsx")
     return final_results
