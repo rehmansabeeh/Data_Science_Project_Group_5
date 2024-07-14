@@ -70,10 +70,8 @@ column_mapping = {
     "TBL_MVA_ID": "TBL_MVA_ID",
 }
 
-numerical_columns = [
-    "PACKAGE_DENSITY",
-    "time_taken_to_pack",
-]
+numerical_columns = ["PACKAGE_DENSITY", "TOTAL_TIME_TAKEN"]
+
 
 columns_to_drop = [
     "DELIVERY_NOTE_NUMBER",
@@ -101,6 +99,17 @@ columns_to_drop = [
 
 
 # Helper Functions
+def categorize_hour(hour):
+    if 0 <= hour < 6:
+        return 1
+    elif 6 <= hour < 12:
+        return 2
+    elif 12 <= hour < 18:
+        return 3
+    elif 18 <= hour < 24:
+        return 4
+
+
 def remove_outliers(df, columns):
     # Function to remove outliers from numerical columns
     for col in columns:
@@ -205,14 +214,20 @@ def create_density(df_merged):
 
 
 def calculate_time(df_merged):
+    if "RECEIPT_DATE_TIME" in df_merged.columns:
+        date = pd.to_datetime(df_merged["RECEIPT_DATE_TIME"])
+        df_merged["month_of_arrival"] = date.dt.month
+        df_merged["day_of_arrival"] = date.dt.day
+        df_merged["hour_of_arrival"] = date.dt.hour
+
     if "DELIVERY_NOTE_DATE_TIME" in df_merged.columns:
         if "RECEIPT_DATE_TIME" in df_merged.columns:
-            df_merged["time_taken_to_pack"] = (
+            df_merged["TIME_TAKEN_TO_PACK"] = (
                 pd.to_datetime(df_merged["DELIVERY_NOTE_DATE_TIME"])
                 - pd.to_datetime(df_merged["RECEIPT_DATE_TIME"])
             ).dt.total_seconds() / 3600
 
-            df_merged = df_merged[df_merged["time_taken_to_pack"] > 0]
+            df_merged = df_merged[df_merged["TIME_TAKEN_TO_PACK"] > 0]
 
         if "PROVIDED_DATE_TIME" in df_merged.columns:
             df_merged["TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"] = (
@@ -232,7 +247,16 @@ def calculate_time(df_merged):
             pd.to_datetime(df_merged["TA_DATE_TIME"])
             - pd.to_datetime(df_merged["PROVIDED_DATE_TIME"])
         ).dt.total_seconds() / 3600  # in hours
-
+    if (
+        "TIME_DIFF_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER" in df_merged.columns
+        and "TIME_TAKEN_TO_PACK" in df_merged.columns
+        and "TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT" in df_merged.columns
+    ):
+        df_merged["TOTAL_TIME_TAKEN"] = (
+            df_merged["TIME_DIFF_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
+            + df_merged["TIME_TAKEN_TO_PACK"]
+            + df_merged["TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
+        )
     # Calculate MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT and MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER
     if "TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT" in df_merged.columns:
         df_merged["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"] = df_merged.groupby(
@@ -254,7 +278,7 @@ def calculate_time(df_merged):
             ]
         ]
         temp_df = temp_df.drop_duplicates()
-        # temp_df.to_excel("mean_processing_time.xlsx")
+        # temp_df.to_excel("../data/mean_processing_time.xlsx")
     return df_merged, temp_df
 
 
@@ -318,6 +342,7 @@ def pre_processing():
             "PROCESSING_TIME_DURATION",
             "MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT",
             "MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER",
+            "TIME_TAKEN_TO_PACK",
         ],
         errors="ignore",
     )
@@ -339,11 +364,10 @@ df_merged = df_merged.dropna()
 # mean_Data = pd.read_excel("mean_processing_time.xlsx")
 
 # Split the data into train and test sets
-if "time_taken_to_pack" in df_merged.columns:
+if "TOTAL_TIME_TAKEN" in df_merged.columns:
+    X = df_merged.drop(columns=["TOTAL_TIME_TAKEN"])
 
-    X = df_merged.drop(columns=["time_taken_to_pack"])
-
-    y = df_merged["time_taken_to_pack"]
+    y = df_merged["TOTAL_TIME_TAKEN"]
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
@@ -472,29 +496,25 @@ if "time_taken_to_pack" in df_merged.columns:
 
     joblib.dump(model, "model.joblib")
 else:
-    X_test = df_merged.drop(columns=["time_taken_to_pack"])
+    X_test = df_merged
     model = download_from_sharepoint_as_pickle()
     y_pred = model.predict(X_test)
     X = pd.DataFrame(X_test, columns=X_test.columns)
     X_test["predictions"] = y_pred
 
 final_results = X_test.merge(temp_df, on="PACKAGE_TYPE", how="left")
-final_results["predictions"] = (
-    final_results["predictions"]
-    + final_results["MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
-    + final_results["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
-)
-if "actual" in final_results.columns:
-    final_results["actual"] += (
-        final_results["MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
-        + final_results["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
-    )
 final_results = final_results.drop(
     columns=[
         "Unnamed: 0",
         "MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER",
         "MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT",
-    ],
-    errors="ignore",
+    ]
 )
+numeric_columns = final_results.select_dtypes(include="number").columns
+final_results[numeric_columns] = final_results[numeric_columns].round(2)
+
+for column in final_results.select_dtypes(include=["float64", "int64"]).columns:
+    final_results[column] = final_results[column].apply(
+        lambda x: str(x).replace(".", ",")
+    )
 final_results.to_excel("pred.xlsx")

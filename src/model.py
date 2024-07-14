@@ -199,9 +199,9 @@ def model_results(df_merged, mean_Data):
     numeric_columns = final_results.select_dtypes(include="number").columns
     final_results[numeric_columns] = final_results[numeric_columns].round(2)
 
-    # for column in final_results.select_dtypes(include=["float64", "int64"]).columns:
-    #     final_results[column] = final_results[column].apply(
-    #         lambda x: str(x).replace(".", ",")
-    #     )
+    for column in final_results.select_dtypes(include=["float64", "int64"]).columns:
+        final_results[column] = final_results[column].apply(
+            lambda x: str(x).replace(".", ",")
+        )
     final_results.to_excel("../data/pred.xlsx")
     return final_results
