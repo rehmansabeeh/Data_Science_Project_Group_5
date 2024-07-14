@@ -1,89 +1,199 @@
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
+import joblib
+import requests
+import io
+import os
+import pandas as pd
+import numpy as np
+import sys
+
+
+import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
-import xgboost as xgb
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.model_selection import train_test_split
+
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.linear_model import Ridge, Lasso
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
-def model_results(X_train, X_test, y_train, y_test):
-    model_xgb = xgb.XGBRegressor(max_depth=7, n_estimators=20)
-    scaler_xgb = StandardScaler()
-    X_train_scaled_xgb = scaler_xgb.fit_transform(X_train)
-    X_test_scaled_xgb = scaler_xgb.transform(X_test)
-    model_xgb.fit(X_train_scaled_xgb, y_train)
-    y_pred_xgb = model_xgb.predict(X_test_scaled_xgb)
+def download_from_sharepoint_as_pickle():
+    url = "https://drive.google.com/uc?export=download&id=1XFSZLsTqZxYFkWauip9gvYTYxN9Xu_7k"
 
-    mae_xgb = mean_absolute_error(y_test, y_pred_xgb)
-    r2_xgb = r2_score(y_test, y_pred_xgb)
-    mse_xgb = mean_squared_error(y_test, y_pred_xgb)
+    # Step 1: Download the file
+    response = requests.get(url)
+    bytes_file_obj = io.BytesIO()
+    bytes_file_obj.write(response.content)
+    bytes_file_obj.seek(0)
+    pickle_obj = joblib.load(bytes_file_obj)
+    return pickle_obj
 
-    print("mae_xgb : ", mae_xgb, " r2_xgb : ", r2_xgb, " mse_xgb : ", mse_xgb)
-    # Define the parameter grid to search over
-    param_grid = {
-        "hidden_layer_sizes": [(64,), (128,), (64, 32), (128, 64)],
-        "activation": ["relu", "tanh"],
-        "solver": ["adam"],
-        "alpha": [0.0001, 0.001, 0.01],
-        "learning_rate": ["constant", "adaptive"],
-        "max_iter": [500, 1000],
-        "random_state": [42],
-    }
 
-    mlp = MLPRegressor()
+def model_results(df_merged, mean_Data):
+    # Split the data into train and test sets
+    if "time_taken_to_pack" in df_merged.columns:
 
-    # Initialize GridSearchCV
-    grid_search = GridSearchCV(
-        estimator=mlp,
-        param_grid=param_grid,
-        scoring="neg_mean_absolute_error",
-        cv=3,
-        verbose=2,
+        X = df_merged.drop(columns=["time_taken_to_pack"])
+
+        y = df_merged["time_taken_to_pack"]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+
+        # List of models to evaluate
+
+        models = {
+            "Ridge": Ridge(),
+            "Lasso": Lasso(),
+            "Decision Tree": DecisionTreeRegressor(),
+            "Random Forest": RandomForestRegressor(),
+            "Gradient Boosting": GradientBoostingRegressor(),
+            "SVR": SVR(),
+            "MLP": MLPRegressor(),
+        }
+
+        # Dictionary to store results and predictions
+
+        results = {}
+
+        predictions = {}
+
+        scaler_mlp = StandardScaler()
+
+        X_train_scaled = scaler_mlp.fit_transform(X_train)
+
+        X_test_scaled = scaler_mlp.transform(X_test)
+
+        # Train and evaluate each model
+
+        for name, model in models.items():
+
+            model.fit(X_train_scaled, y_train)
+
+            y_pred = model.predict(X_test_scaled)
+
+            mse = mean_squared_error(y_test, y_pred)
+
+            mae = mean_absolute_error(y_test, y_pred)
+
+            r2 = r2_score(y_test, y_pred)
+
+            results[name] = {"MSE": mse, "MAE": mae, "R²": r2}
+
+            predictions[name] = y_pred
+
+        # Print results
+        for name, metrics in results.items():
+
+            print(f"Model: {name}")
+
+            for metric, value in metrics.items():
+
+                print(f"{metric}: {value}")
+
+            print("\n")
+
+        # Plot parity plots
+
+        plt.figure(figsize=(20, 10))
+
+        for i, (name, y_pred) in enumerate(predictions.items()):
+
+            plt.subplot(3, 3, i + 1)
+
+            plt.scatter(y_test, y_pred, alpha=0.5)
+            plt.plot(
+                [y_test.min(), y_test.max()],
+                [y_test.min(), y_test.max()],
+                "r--",
+                linewidth=2,
+            )
+
+            plt.title(f"{name} Parity Plot")
+
+            plt.xlabel("Actual Values")
+
+            plt.ylabel("Predicted Values")
+
+            plt.grid(True)
+
+        plt.tight_layout()
+
+        plt.show()
+
+        print("--------- best model from these is Decision Tree --------")
+
+        model = DecisionTreeRegressor()
+        name = "Decision Tree"
+
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        X_test = pd.DataFrame(X_test, columns=X.columns)
+        X_test["predictions"] = y_pred
+        X_test["actual"] = y_test
+
+        mse = mean_squared_error(y_test, y_pred)
+        mae = mean_absolute_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+
+        results[name] = {"MSE": mse, "MAE": mae, "R²": r2}
+        predictions[name] = y_pred
+
+        # Print results
+        for name, metrics in results.items():
+            print(f"Model: {name}")
+            for metric, value in metrics.items():
+                print(f"{metric}: {value}")
+            print("\n")
+
+        # Plot parity plots
+        plt.figure(figsize=(20, 10))
+
+        plt.scatter(y_test, y_pred, alpha=0.5)
+        plt.plot(
+            [y_test.min(), y_test.max()],
+            [y_test.min(), y_test.max()],
+            "r--",
+            linewidth=2,
+        )
+        plt.title(f"{name} Parity Plot")
+        plt.xlabel("Actual Values")
+        plt.ylabel("Predicted Values")
+        plt.grid(True)
+
+        plt.tight_layout()
+        plt.show()
+
+        joblib.dump(model, "model.joblib")
+    else:
+        X_test = df_merged.drop(columns=["time_taken_to_pack"])
+        model = download_from_sharepoint_as_pickle()
+        y_pred = model.predict(X_test)
+        X = pd.DataFrame(X_test, columns=X_test.columns)
+        X_test["predictions"] = y_pred
+
+    final_results = X_test.merge(mean_Data, on="PACKAGE_TYPE", how="left")
+    final_results["predictions"] = (
+        final_results["predictions"]
+        + final_results["MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
+        + final_results["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
     )
-    scaler_mlp = StandardScaler()
-    X_train_scaled_mlp = scaler_mlp.fit_transform(X_train)
-    X_test_scaled_mlp = scaler_mlp.transform(X_test)
-
-    # Perform Grid Search to find the best parameters
-    grid_search.fit(X_train_scaled_mlp, y_train)
-
-    # Evaluate best model on test set
-    best_model = grid_search.best_estimator_
-
-    best_model.fit(X_train_scaled_mlp, y_train)
-    y_pred_mlp = best_model.predict(X_test_scaled_mlp)
-
-    mse_mlp = mean_squared_error(y_test, y_pred_mlp)
-    mae_mlp = mean_absolute_error(y_test, y_pred_mlp)
-    r2_mlp = r2_score(y_test, y_pred_mlp)
-    print("mse_mlp : ", mse_mlp, " mae_mlp : ", mae_mlp, " r2_mlp : ", r2_mlp)
-
-    # Printing the metrics
-    models = ["XGBRegressor", "MLPRegressor"]
-    metrics = ["MAE", "MSE", "R²"]
-    mae_scores = [mae_xgb, mae_mlp]
-    mse_scores = [mse_xgb, mse_mlp]
-    r2_scores = [r2_xgb, r2_mlp]
-    plt.figure(figsize=(15, 5))
-
-    # Plot MAE
-    plt.subplot(1, 3, 1)
-    plt.bar(models, mae_scores, color=["green", "blue"])
-    plt.ylabel("Score")
-    plt.title("Mean Absolute Error (MAE)")
-
-    # Plot MSE
-    plt.subplot(1, 3, 2)
-    plt.bar(models, mse_scores, color=["orange", "purple"])
-    plt.ylabel("Score")
-    plt.title("Mean Squared Error (MSE)")
-
-    # Plot R²
-    plt.subplot(1, 3, 3)
-    plt.bar(models, r2_scores, color=["red", "pink"])
-    plt.ylabel("Score")
-    plt.title("R² Score")
-
-    plt.tight_layout()
-    plt.show()
-    return best_model
+    if "actual" in final_results.columns:
+        final_results["actual"] += (
+            final_results["MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
+            + final_results["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
+        )
+    final_results = final_results.drop(
+        columns=[
+            "Unnamed: 0",
+            "MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER",
+            "MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT",
+        ]
+    )
+    final_results.to_excel("../data/pred.xlsx")
+    return final_results
