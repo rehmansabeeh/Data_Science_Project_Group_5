@@ -131,6 +131,9 @@ def model_results(df_merged, mean_Data):
         model = DecisionTreeRegressor()
         name = "Decision Tree"
 
+        results = {}
+        predictions = {}
+
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
         X_test = pd.DataFrame(X_test, columns=X.columns)
