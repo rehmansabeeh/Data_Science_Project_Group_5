@@ -21,7 +21,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
 def download_from_sharepoint_as_pickle():
-    url = "https://drive.google.com/uc?export=download&id=1XFSZLsTqZxYFkWauip9gvYTYxN9Xu_7k"
+    url = "https://drive.google.com/uc?export=download&id=1Uvu7YjqpmLjeIS2HVzInRyfKVxosJreR"
 
     # Step 1: Download the file
     response = requests.get(url)
@@ -426,34 +426,6 @@ if "TOTAL_TIME_TAKEN" in df_merged.columns:
 
         print("\n")
 
-    # Plot parity plots
-
-    plt.figure(figsize=(20, 10))
-
-    for i, (name, y_pred) in enumerate(predictions.items()):
-
-        plt.subplot(3, 3, i + 1)
-
-        plt.scatter(y_test, y_pred, alpha=0.5)
-        plt.plot(
-            [y_test.min(), y_test.max()],
-            [y_test.min(), y_test.max()],
-            "r--",
-            linewidth=2,
-        )
-
-        plt.title(f"{name} Parity Plot")
-
-        plt.xlabel("Actual Values")
-
-        plt.ylabel("Predicted Values")
-
-        plt.grid(True)
-
-    plt.tight_layout()
-
-    plt.show()
-
     print("--------- best model from these is Decision Tree --------")
 
     model = DecisionTreeRegressor()
@@ -465,36 +437,7 @@ if "TOTAL_TIME_TAKEN" in df_merged.columns:
     X_test["predictions"] = y_pred
     X_test["actual"] = y_test
 
-    mse = mean_squared_error(y_test, y_pred)
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
 
-    results[name] = {"MSE": mse, "MAE": mae, "R²": r2}
-    predictions[name] = y_pred
-
-    # Print results
-    for name, metrics in results.items():
-        print(f"Model: {name}")
-        for metric, value in metrics.items():
-            print(f"{metric}: {value}")
-        print("\n")
-
-    # Plot parity plots
-    plt.figure(figsize=(20, 10))
-
-    plt.scatter(y_test, y_pred, alpha=0.5)
-    plt.plot(
-        [y_test.min(), y_test.max()], [y_test.min(), y_test.max()], "r--", linewidth=2
-    )
-    plt.title(f"{name} Parity Plot")
-    plt.xlabel("Actual Values")
-    plt.ylabel("Predicted Values")
-    plt.grid(True)
-
-    plt.tight_layout()
-    plt.show()
-
-    joblib.dump(model, "model.joblib")
 else:
     X_test = df_merged
     model = download_from_sharepoint_as_pickle()
@@ -505,7 +448,6 @@ else:
 final_results = X_test.merge(temp_df, on="PACKAGE_TYPE", how="left")
 final_results = final_results.drop(
     columns=[
-        "Unnamed: 0",
         "MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER",
         "MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT",
     ]

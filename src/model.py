@@ -15,7 +15,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
 def download_from_sharepoint_as_pickle():
-    url = "https://drive.google.com/uc?export=download&id=1XFSZLsTqZxYFkWauip9gvYTYxN9Xu_7k"
+    url = "https://drive.google.com/uc?export=download&id=1Uvu7YjqpmLjeIS2HVzInRyfKVxosJreR"
 
     # Step 1: Download the file
     response = requests.get(url)
