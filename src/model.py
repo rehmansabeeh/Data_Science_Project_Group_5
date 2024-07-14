@@ -1,21 +1,14 @@
 import joblib
 import requests
 import io
-import os
 import pandas as pd
-import numpy as np
-import sys
-
-
-import seaborn as sns
 import matplotlib.pyplot as plt
-
+from datetime import datetime
 from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.model_selection import train_test_split
-
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge, Lasso
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -33,13 +26,26 @@ def download_from_sharepoint_as_pickle():
     return pickle_obj
 
 
+def create_datetime(row):
+    # Assuming the current year for the datetime
+    year = datetime.now().year
+    row["month_of_arrival"] = row["month_of_arrival"].astype(int)
+    row["day_of_arrival"] = row["day_of_arrival"].astype(int)
+    row["hour_of_arrival"] = row["hour_of_arrival"].astype(int)
+    return datetime(
+        year, row["month_of_arrival"], row["day_of_arrival"], row["hour_of_arrival"]
+    )
+
+
+# Apply the function to each row
+
+
 def model_results(df_merged, mean_Data):
     # Split the data into train and test sets
-    if "time_taken_to_pack" in df_merged.columns:
+    if "TOTAL_TIME_TAKEN" in df_merged.columns:
+        X = df_merged.drop(columns=["TOTAL_TIME_TAKEN"])
 
-        X = df_merged.drop(columns=["time_taken_to_pack"])
-
-        y = df_merged["time_taken_to_pack"]
+        y = df_merged["TOTAL_TIME_TAKEN"]
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
@@ -136,6 +142,7 @@ def model_results(df_merged, mean_Data):
 
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
+
         X_test = pd.DataFrame(X_test, columns=X.columns)
         X_test["predictions"] = y_pred
         X_test["actual"] = y_test
@@ -174,23 +181,14 @@ def model_results(df_merged, mean_Data):
 
         joblib.dump(model, "model.joblib")
     else:
-        X_test = df_merged.drop(columns=["time_taken_to_pack"])
+        X_test = df_merged
         model = download_from_sharepoint_as_pickle()
         y_pred = model.predict(X_test)
+
         X = pd.DataFrame(X_test, columns=X_test.columns)
         X_test["predictions"] = y_pred
 
     final_results = X_test.merge(mean_Data, on="PACKAGE_TYPE", how="left")
-    final_results["predictions"] = (
-        final_results["predictions"]
-        + final_results["MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
-        + final_results["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
-    )
-    if "actual" in final_results.columns:
-        final_results["actual"] += (
-            final_results["MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
-            + final_results["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
-        )
     final_results = final_results.drop(
         columns=[
             "Unnamed: 0",
@@ -198,5 +196,12 @@ def model_results(df_merged, mean_Data):
             "MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT",
         ]
     )
+    numeric_columns = final_results.select_dtypes(include="number").columns
+    final_results[numeric_columns] = final_results[numeric_columns].round(2)
+
+    # for column in final_results.select_dtypes(include=["float64", "int64"]).columns:
+    #     final_results[column] = final_results[column].apply(
+    #         lambda x: str(x).replace(".", ",")
+    #     )
     final_results.to_excel("../data/pred.xlsx")
     return final_results

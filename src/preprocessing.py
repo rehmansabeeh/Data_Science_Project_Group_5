@@ -41,10 +41,7 @@ column_mapping = {
     "TBL_MVA_ID": "TBL_MVA_ID",
 }
 
-numerical_columns = [
-    "PACKAGE_DENSITY",
-    "time_taken_to_pack",
-]
+numerical_columns = ["PACKAGE_DENSITY", "TOTAL_TIME_TAKEN"]
 
 columns_to_drop = [
     "DELIVERY_NOTE_NUMBER",
@@ -72,6 +69,17 @@ columns_to_drop = [
 
 
 # Helper Functions
+def categorize_hour(hour):
+    if 0 <= hour < 6:
+        return 1
+    elif 6 <= hour < 12:
+        return 2
+    elif 12 <= hour < 18:
+        return 3
+    elif 18 <= hour < 24:
+        return 4
+
+
 def remove_outliers(df, columns):
     # Function to remove outliers from numerical columns
     for col in columns:
@@ -176,14 +184,20 @@ def create_density(df_merged):
 
 
 def calculate_time(df_merged):
+    if "RECEIPT_DATE_TIME" in df_merged.columns:
+        date = pd.to_datetime(df_merged["RECEIPT_DATE_TIME"])
+        df_merged["month_of_arrival"] = date.dt.month
+        df_merged["day_of_arrival"] = date.dt.day
+        df_merged["hour_of_arrival"] = date.dt.hour
+
     if "DELIVERY_NOTE_DATE_TIME" in df_merged.columns:
         if "RECEIPT_DATE_TIME" in df_merged.columns:
-            df_merged["time_taken_to_pack"] = (
+            df_merged["TIME_TAKEN_TO_PACK"] = (
                 pd.to_datetime(df_merged["DELIVERY_NOTE_DATE_TIME"])
                 - pd.to_datetime(df_merged["RECEIPT_DATE_TIME"])
             ).dt.total_seconds() / 3600
 
-            df_merged = df_merged[df_merged["time_taken_to_pack"] > 0]
+            df_merged = df_merged[df_merged["TIME_TAKEN_TO_PACK"] > 0]
 
         if "PROVIDED_DATE_TIME" in df_merged.columns:
             df_merged["TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"] = (
@@ -203,7 +217,16 @@ def calculate_time(df_merged):
             pd.to_datetime(df_merged["TA_DATE_TIME"])
             - pd.to_datetime(df_merged["PROVIDED_DATE_TIME"])
         ).dt.total_seconds() / 3600  # in hours
-
+    if (
+        "TIME_DIFF_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER" in df_merged.columns
+        and "TIME_TAKEN_TO_PACK" in df_merged.columns
+        and "TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT" in df_merged.columns
+    ):
+        df_merged["TOTAL_TIME_TAKEN"] = (
+            df_merged["TIME_DIFF_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER"]
+            + df_merged["TIME_TAKEN_TO_PACK"]
+            + df_merged["TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"]
+        )
     # Calculate MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT and MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER
     if "TIME_DIFF_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT" in df_merged.columns:
         df_merged["MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT"] = df_merged.groupby(
@@ -261,14 +284,14 @@ def pre_processing():
         and "RECEIPT_DATE_TIME" in df_merged.columns
     ):
 
-        # Calculate time_taken_to_pack and remove rows with time_taken_to_pack <= 0
+        # Calculate TIME_TAKEN_TO_PACK and remove rows with TIME_TAKEN_TO_PACK <= 0
         df_merged = calculate_time(df_merged)
 
         df_merged = generate_synthetic_data(df_merged, times=5)
 
         # Generate synthetic data
 
-        df_merged = df_merged[df_merged["time_taken_to_pack"] > 0]
+        df_merged = df_merged[df_merged["TIME_TAKEN_TO_PACK"] > 0]
 
         # Drop unnecessary columns
     df_merged = df_merged.drop(
@@ -289,6 +312,7 @@ def pre_processing():
             "PROCESSING_TIME_DURATION",
             "MEAN_DELIVERY_NOTE_TO_READY_FOR_SHIPPMENT",
             "MEAN_READY_FOR_SHIPPMENT_TO_TRANSPORT_ORDER",
+            "TIME_TAKEN_TO_PACK",
         ],
         errors="ignore",
     )
